@@ -1,0 +1,20 @@
+
+project sources/meta-freescale/
+diff --git a/recipes-bsp/imx-mkimage/imx-boot_1.0.bb b/recipes-bsp/imx-mkimage/imx-boot_1.0.bb
+index d258c112..13cdee02 100644
+--- a/recipes-bsp/imx-mkimage/imx-boot_1.0.bb
++++ b/recipes-bsp/imx-mkimage/imx-boot_1.0.bb
+@@ -106,8 +106,12 @@ compile_mx8m() {
+         # Use DTB binary patched with signature node
+         cp ${DEPLOY_DIR_IMAGE}/${UBOOT_DTB_BINARY}           ${BOOT_STAGING}/${UBOOT_DTB_NAME_EXTRA}
+     else
++        rm -f ${BOOT_STAGING}/fsl-imx8mq-phanbell.dtb ${BOOT_STAGING}/evk.dtb
+         cp ${DEPLOY_DIR_IMAGE}/${BOOT_TOOLS}/${UBOOT_DTB_NAME_EXTRA} \
+-                                                             ${BOOT_STAGING}
++                                                            ${BOOT_STAGING}
++        cp ${DEPLOY_DIR_IMAGE}/${BOOT_TOOLS}/${UBOOT_DTB_NAME_EXTRA} \
++                                                            ${BOOT_STAGING}/evk.dtb
++
+     fi
+     ln -sf ${UBOOT_DTB_NAME_EXTRA}                           ${BOOT_STAGING}/${UBOOT_DTB_NAME}
+ 
