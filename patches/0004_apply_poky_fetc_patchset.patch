@@ -1,0 +1,791 @@
+From 7812f104db9a2c72ea4dd5c458a4d50613360b08 Mon Sep 17 00:00:00 2001
+From: Richard Purdie <richard.purdie@linuxfoundation.org>
+Date: Wed, 22 May 2024 16:38:00 +0100
+Subject: bitbake: fetch/npmsw: The fetcher shouldn't have any knowledge of S
+
+I don't know why there is hardcoded knowledge of S in the fetcher but there
+shouldn't be and the OE unpack changes highlight this doing things it
+shouldn't.
+
+Drop the S reference and use rootdir which is the only place it should
+be touching.
+
+(Bitbake rev: 84f102954e10a3390fca9c26d5c3c639e952a2c9)
+
+Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
+---
+ bitbake/lib/bb/fetch2/npmsw.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/bitbake/lib/bb/fetch2/npmsw.py b/bitbake/lib/bb/fetch2/npmsw.py
+index ff5f8dc755..b55e885d7b 100644
+--- a/bitbake/lib/bb/fetch2/npmsw.py
++++ b/bitbake/lib/bb/fetch2/npmsw.py
+@@ -268,7 +268,7 @@ class NpmShrinkWrap(FetchMethod):
+ 
+     def unpack(self, ud, rootdir, d):
+         """Unpack the downloaded dependencies"""
+-        destdir = d.getVar("S")
++        destdir = rootdir
+         destsuffix = ud.parm.get("destsuffix")
+         if destsuffix:
+             destdir = os.path.join(rootdir, destsuffix)
+-- 
+cgit 1.2.3-korg
+
+From 524e6b65a64c0310918cda9eaf5c1b6dd819dd0f Mon Sep 17 00:00:00 2001
+From: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Date: Thu, 22 Aug 2024 09:53:14 +0200
+Subject: bitbake: fetch2/npmsw: fix fetching git revisions not on master
+
+The NPM package.json documentation[1] states that git URLs may contain
+a commit-ish suffix to specify a specific revision. When running
+`npm install`, this revision will be looked for on any branch of the
+repository.
+
+The bitbake implementation however translates the URL stored in
+package.json into a git URL to be fetch by the bitbake git fetcher. The
+bitbake fetcher git.py, enforces the branch to be master by default. If
+the revision specified in the package.json is not on the master branch,
+the fetch will fail while the package.json is valid.
+
+To fix this, append the ";nobranch=1" suffix to the revision in the git
+URL to be fetched. This will make the bitbake git fetcher ignore the
+branch and respect the behavior of `npm install``.
+
+This can be tested with the following command:
+ $ devtool add --npm-dev https://github.com/seapath/cockpit-cluster-dashboard.git -B version
+Which points to a project which has a package.json with a git URL:
+```json
+  "devDependencies": {
+    "cockpit-repo": "git+https://github.com/cockpit-project/cockpit.git#d34cabacb8e5e1e028c7eea3d6e3b606d862b8ac"
+  }
+```
+In this repo, the specified revision is on the "main" branch, which
+would fail without this fix.
+
+[1] https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
+
+Co-authored-by: Tanguy Raufflet <tanguy.raufflet@savoirfairelinux.com>
+(Bitbake rev: 37a35adf7882f231c13643dbf9168497c6a242a1)
+
+Signed-off-by: Tanguy Raufflet <tanguy.raufflet@savoirfairelinux.com>
+Signed-off-by: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
+---
+ bitbake/lib/bb/fetch2/npmsw.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/bitbake/lib/bb/fetch2/npmsw.py b/bitbake/lib/bb/fetch2/npmsw.py
+index b55e885d7b..d8ed9df327 100644
+--- a/bitbake/lib/bb/fetch2/npmsw.py
++++ b/bitbake/lib/bb/fetch2/npmsw.py
+@@ -184,6 +184,7 @@ class NpmShrinkWrap(FetchMethod):
+                 uri = URI("git://" + str(groups["url"]))
+                 uri.params["protocol"] = str(groups["protocol"])
+                 uri.params["rev"] = str(groups["rev"])
++                uri.params["nobranch"] = "1"
+                 uri.params["destsuffix"] = destsuffix
+ 
+                 url = str(uri)
+-- 
+cgit 1.2.3-korg
+
+From ec86853a2691dd903428e484d0ae3f321734f60d Mon Sep 17 00:00:00 2001
+From: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Date: Thu, 22 Aug 2024 09:53:15 +0200
+Subject: bitbake: fetch2/npmsw: allow packages not declaring a registry
+ version
+
+We fetch npm dependencies from the npm-shrinkwrap.json file. They can
+point to a package on the NPM registry with a version field, or to a
+git/http/file URL with the resolved field. Such packages are allowed not
+to declare a registry version field because they may not have been
+published to the NPM registry. The previous implementation refuses to
+fetch such packages and throws an error.
+
+The resolved field contains the exact source, including the revision,
+wich we can use to pass as SRC_URI to the git/http/file fetcher. The
+integrity field is also mandatory for HTTP tarballs which will ensure
+reproducibility. So even if the version field is not present, we are
+still fetching a precise revision of the package.
+
+Another commit published along this stack is also required in the npm
+class to support these packages.
+
+v5:
+ - improve commit message
+v3:
+ - Split bitbake npmsw.py modification in another commit
+
+Co-authored-by: Tanguy Raufflet <tanguy.raufflet@savoirfairelinux.com>
+(Bitbake rev: 209982b5a3efc8081e65b4326bf9b64eef7f0ba0)
+
+Signed-off-by: Tanguy Raufflet <tanguy.raufflet@savoirfairelinux.com>
+Signed-off-by: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
+---
+ bitbake/lib/bb/fetch2/npmsw.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/bitbake/lib/bb/fetch2/npmsw.py b/bitbake/lib/bb/fetch2/npmsw.py
+index d8ed9df327..a5fa598deb 100644
+--- a/bitbake/lib/bb/fetch2/npmsw.py
++++ b/bitbake/lib/bb/fetch2/npmsw.py
+@@ -97,7 +97,7 @@ class NpmShrinkWrap(FetchMethod):
+ 
+             integrity = params.get("integrity", None)
+             resolved = params.get("resolved", None)
+-            version = params.get("version", None)
++            version = params.get("version", resolved)
+ 
+             # Handle registry sources
+             if is_semver(version) and integrity:
+-- 
+cgit 1.2.3-korg
+
+From 1053035cbca82f177e6cf8a2d467786de7aa146c Mon Sep 17 00:00:00 2001
+From: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Date: Mon, 12 Aug 2024 14:28:26 +0200
+Subject: npm: accept unspecified versions in package.json
+
+Our current emulation mandates that the package.json contains a version
+field. Some packages may not provide it when they are not published to
+the registry. The actual `npm pack` would allow such packages, so
+should we.
+
+This patch adds a default value to allow building such packages.
+
+This applies for instance to this package which doesn't declare a
+version:
+ - https://github.com/cockpit-project/cockpit/blob/23701a555a5af13f998ee4c7526d27fdb5669d63/package.json#L2
+
+v3:
+ - Split bitbake npmsw.py modification in another commit
+
+Co-authored-by: Tanguy Raufflet <tanguy.raufflet@savoirfairelinux.com>
+(From OE-Core rev: 470c4c027c2b8bbecf23aa63650a22a312de9aa6)
+
+Signed-off-by: Tanguy Raufflet <tanguy.raufflet@savoirfairelinux.com>
+Signed-off-by: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Signed-off-by: Alexandre Belloni <alexandre.belloni@bootlin.com>
+Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
+---
+ meta/classes-recipe/npm.bbclass | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/meta/classes-recipe/npm.bbclass b/meta/classes-recipe/npm.bbclass
+index 91da3295f2..a73ff29be8 100644
+--- a/meta/classes-recipe/npm.bbclass
++++ b/meta/classes-recipe/npm.bbclass
+@@ -72,8 +72,10 @@ def npm_pack(env, srcdir, workdir):
+         j = json.load(f)
+ 
+     # base does not really matter and is for documentation purposes
+-    # only.  But the 'version' part must exist because other parts of
++    # only. But the 'version' part must exist because other parts of
+     # the bbclass rely on it.
++    if 'version' not in j:
++        j['version'] = '0.0.0-unknown'
+     base = j['name'].split('/')[-1]
+     tarball = os.path.join(workdir, "%s-%s.tgz" % (base, j['version']));
+ 
+-- 
+cgit 1.2.3-korg
+
+From 01d17cd5d42d1c9c349e1249bdacffb24d8446bb Mon Sep 17 00:00:00 2001
+From: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Date: Mon, 12 Aug 2024 14:28:27 +0200
+Subject: recipetool: create_npm: resolve licenses defined in package.json
+
+Some npm packages do not copy the LICENSE or COPY file into their
+git repository. They'll instead simply use SPDX identifiers in their
+package.json. A fallback for those repositories attempted to match
+the README file to a license file instead, which had a very low
+probability of success.
+
+This commit replaces this fallback with parsing the package.json and
+looking for the license in COMMON_LICENSE_DIR. If the license is not
+found, "Unknown" will still be produced.
+
+This also generates "Unknown" for packages which had no README file,
+which could silently not appear in the generated recipe. The user was
+more likely to miss them.
+
+Co-authored-by: Tanguy Raufflet <tanguy.raufflet@savoirfairelinux.com>
+(From OE-Core rev: 445604cfc4a5813ea635f18053cd1f673bf0b830)
+
+Signed-off-by: Tanguy Raufflet <tanguy.raufflet@savoirfairelinux.com>
+Signed-off-by: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Signed-off-by: Alexandre Belloni <alexandre.belloni@bootlin.com>
+Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
+---
+ scripts/lib/recipetool/create_npm.py | 57 ++++++++++++++++++++++++++----------
+ 1 file changed, 41 insertions(+), 16 deletions(-)
+
+diff --git a/scripts/lib/recipetool/create_npm.py b/scripts/lib/recipetool/create_npm.py
+index 113a89f6a6..dd0ac01c3e 100644
+--- a/scripts/lib/recipetool/create_npm.py
++++ b/scripts/lib/recipetool/create_npm.py
+@@ -112,40 +112,52 @@ class NpmRecipeHandler(RecipeHandler):
+         """Return the extra license files and the list of packages"""
+         licfiles = []
+         packages = {}
++        # Licenses from package.json point to COMMON_LICENSE_DIR so we need
++        # to associate them explicitely for split_pkg_licenses()
++        fallback_licenses = dict()
+ 
+         # Handle the parent package
+         packages["${PN}"] = ""
+ 
+-        def _licfiles_append_fallback_readme_files(destdir):
+-            """Append README files as fallback to license files if a license files is missing"""
++        def _licfiles_append_fallback_package_files(destdir):
++            """Append package.json files as fallback to license files if a license files is missing"""
++            def _get_licenses_from_package_json(package_json):
++                with open(os.path.join(srctree, package_json), "r") as f:
++                    data = json.load(f)
++                    if "license" in data:
++                        licenses = data["license"].split(" ")
++                        licenses = [license.strip("()") for license in licenses if license != "OR" and license != "AND"]
++                        return ["${COMMON_LICENSE_DIR}/" + license for license in licenses], licenses
++                    else:
++                        return [package_json], None
+ 
+             fallback = True
+-            readmes = []
+             basedir = os.path.join(srctree, destdir)
+             for fn in os.listdir(basedir):
+                 upper = fn.upper()
+-                if upper.startswith("README"):
+-                    fullpath = os.path.join(basedir, fn)
+-                    readmes.append(fullpath)
+                 if upper.startswith("COPYING") or "LICENCE" in upper or "LICENSE" in upper:
+                     fallback = False
+             if fallback:
+-                for readme in readmes:
+-                    licfiles.append(os.path.relpath(readme, srctree))
++                pkg_json = os.path.join(basedir, "package.json")
++                return _get_licenses_from_package_json(pkg_json)
++            return [], None
+ 
+         # Handle the dependencies
+         def _handle_dependency(name, params, destdir):
+             deptree = destdir.split('node_modules/')
+             suffix = "-".join([npm_package(dep) for dep in deptree])
+             packages["${PN}" + suffix] = destdir
+-            _licfiles_append_fallback_readme_files(destdir)
++            (fallback_licfiles, common_lics) = _licfiles_append_fallback_package_files(destdir)
++            licfiles.extend(fallback_licfiles)
++            if common_lics:
++                fallback_licenses["${PN}" + suffix] = common_lics
+ 
+         with open(shrinkwrap_file, "r") as f:
+             shrinkwrap = json.load(f)
+ 
+         foreach_dependencies(shrinkwrap, _handle_dependency, dev)
+ 
+-        return licfiles, packages
++        return licfiles, packages, fallback_licenses
+     
+     # Handle the peer dependencies   
+     def _handle_peer_dependency(self, shrinkwrap_file):
+@@ -266,18 +278,31 @@ class NpmRecipeHandler(RecipeHandler):
+         fetcher.unpack(srctree)
+ 
+         bb.note("Handling licences ...")
+-        (licfiles, packages) = self._handle_licenses(srctree, shrinkwrap_file, dev)
++        (licfiles, packages, fallback_licenses) = self._handle_licenses(srctree, shrinkwrap_file, dev)
+ 
+         def _guess_odd_license(licfiles):
+             import bb
+ 
+             md5sums = get_license_md5sums(d, linenumbers=True)
+ 
++            def _resolve_licfile(srctree, licfile):
++                match = re.search(r'\$\{COMMON_LICENSE_DIR\}/(.+)$', licfile)
++                if match:
++                    license = match.group(1)
++                    commonlicdir = d.getVar('COMMON_LICENSE_DIR')
++                    return os.path.join(commonlicdir, license)
++                
++                return os.path.join(srctree, licfile)
++
+             chksums = []
+             licenses = []
++            md5value = None
+             for licfile in licfiles:
+-                f = os.path.join(srctree, licfile)
+-                md5value = bb.utils.md5_file(f)
++                f = _resolve_licfile(srctree, licfile)
++                try:
++                    md5value = bb.utils.md5_file(f)
++                except FileNotFoundError:
++                    logger.info("Could not determine license for '%s'" % licfile)
+                 (license, beginline, endline, md5) = md5sums.get(md5value,
+                     (None, "", "", ""))
+                 if not license:
+@@ -292,10 +317,10 @@ class NpmRecipeHandler(RecipeHandler):
+                     ";endline=%s" % (endline) if endline else "",
+                     md5 if md5 else md5value))
+                 licenses.append((license, licfile, md5value))
+-            return (licenses, chksums)
++            return (licenses, chksums, fallback_licenses)
+ 
+-        (licenses, extravalues["LIC_FILES_CHKSUM"]) = _guess_odd_license(licfiles)
+-        split_pkg_licenses([*licenses, *guess_license(srctree, d)], packages, lines_after)
++        (licenses, extravalues["LIC_FILES_CHKSUM"], fallback_licenses) = _guess_odd_license(licfiles)
++        split_pkg_licenses([*licenses, *guess_license(srctree, d)], packages, lines_after, fallback_licenses)
+ 
+         classes.append("npm")
+         handled.append("buildsystem")
+-- 
+cgit 1.2.3-korg
+
+From 69bf37a3dd0470dc153bb7a21bd8f13a64bde2c3 Mon Sep 17 00:00:00 2001
+From: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Date: Mon, 12 Aug 2024 14:28:28 +0200
+Subject: recipetool: create: split guess_license function
+
+The npm recipetool handler redefines the license code the could be
+unified. In order to do this refactoring, extract the bits we'll
+need into separate functions.
+
+guess_license() is renamed to find_licenses() and is split into
+find_license_files() and match_licenses().
+
+(From OE-Core rev: f1ec28feaea8ea6a2df894dd4ddba561c8a04ed2)
+
+Signed-off-by: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Signed-off-by: Alexandre Belloni <alexandre.belloni@bootlin.com>
+Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
+---
+ meta/classes-global/license.bbclass        |  8 +++----
+ meta/lib/oeqa/selftest/cases/recipetool.py |  1 +
+ scripts/lib/recipetool/create.py           | 34 +++++++++++++++++++-----------
+ scripts/lib/recipetool/create_go.py        |  4 ++--
+ scripts/lib/recipetool/create_npm.py       |  4 ++--
+ 5 files changed, 31 insertions(+), 20 deletions(-)
+
+diff --git a/meta/classes-global/license.bbclass b/meta/classes-global/license.bbclass
+index b2e0d3faba..4e39ec1d44 100644
+--- a/meta/classes-global/license.bbclass
++++ b/meta/classes-global/license.bbclass
+@@ -39,7 +39,7 @@ python do_populate_lic() {
+ }
+ 
+ PSEUDO_IGNORE_PATHS .= ",${@','.join(((d.getVar('COMMON_LICENSE_DIR') or '') + ' ' + (d.getVar('LICENSE_PATH') or '') + ' ' + d.getVar('COREBASE') + '/meta/COPYING').split())}"
+-# it would be better to copy them in do_install:append, but find_license_filesa is python
++# it would be better to copy them in do_install:append, but find_license_files is python
+ python perform_packagecopy:prepend () {
+     enabled = oe.data.typed_value('LICENSE_CREATE_PACKAGE', d)
+     if d.getVar('CLASSOVERRIDE') == 'class-target' and enabled:
+@@ -149,14 +149,14 @@ def find_license_files(d):
+             # and "with exceptions" being *
+             # we'll just strip out the modifier and put
+             # the base license.
+-            find_license(node.s.replace("+", "").replace("*", ""))
++            find_licenses(node.s.replace("+", "").replace("*", ""))
+             self.generic_visit(node)
+ 
+         def visit_Constant(self, node):
+-            find_license(node.value.replace("+", "").replace("*", ""))
++            find_licenses(node.value.replace("+", "").replace("*", ""))
+             self.generic_visit(node)
+ 
+-    def find_license(license_type):
++    def find_licenses(license_type):
+         try:
+             bb.utils.mkdirhier(gen_lic_dest)
+         except:
+diff --git a/meta/lib/oeqa/selftest/cases/recipetool.py b/meta/lib/oeqa/selftest/cases/recipetool.py
+index 42202b7831..f742dd4d64 100644
+--- a/meta/lib/oeqa/selftest/cases/recipetool.py
++++ b/meta/lib/oeqa/selftest/cases/recipetool.py
+@@ -1068,6 +1068,7 @@ class RecipetoolTests(RecipetoolBase):
+ 
+         d = DataConnectorCopy
+         d.getVar = Mock(return_value=commonlicdir)
++        d.expand = Mock(side_effect=lambda x: x)
+ 
+         srctree = tempfile.mkdtemp(prefix='recipetoolqa')
+         self.track_for_cleanup(srctree)
+diff --git a/scripts/lib/recipetool/create.py b/scripts/lib/recipetool/create.py
+index 066366e34f..c626844370 100644
+--- a/scripts/lib/recipetool/create.py
++++ b/scripts/lib/recipetool/create.py
+@@ -960,7 +960,7 @@ def handle_license_vars(srctree, lines_before, handled, extravalues, d):
+         # Someone else has already handled the license vars, just return their value
+         return lichandled[0][1]
+ 
+-    licvalues = guess_license(srctree, d)
++    licvalues = find_licenses(srctree, d)
+     licenses = []
+     lic_files_chksum = []
+     lic_unknown = []
+@@ -1216,13 +1216,7 @@ def crunch_license(licfile):
+         lictext = ''
+     return md5val, lictext
+ 
+-def guess_license(srctree, d):
+-    import bb
+-    md5sums = get_license_md5sums(d)
+-
+-    crunched_md5sums = crunch_known_licenses(d)
+-
+-    licenses = []
++def find_license_files(srctree):
+     licspecs = ['*LICEN[CS]E*', 'COPYING*', '*[Ll]icense*', 'LEGAL*', '[Ll]egal*', '*GPL*', 'README.lic*', 'COPYRIGHT*', '[Cc]opyright*', 'e[dp]l-v10']
+     skip_extensions = (".html", ".js", ".json", ".svg", ".ts", ".go")
+     licfiles = []
+@@ -1235,11 +1229,22 @@ def guess_license(srctree, d):
+                     fullpath = os.path.join(root, fn)
+                     if not fullpath in licfiles:
+                         licfiles.append(fullpath)
++
++    return licfiles
++
++def match_licenses(licfiles, srctree, d):
++    import bb
++    md5sums = get_license_md5sums(d)
++
++    crunched_md5sums = crunch_known_licenses(d)
++
++    licenses = []
+     for licfile in sorted(licfiles):
+-        md5value = bb.utils.md5_file(licfile)
++        resolved_licfile = d.expand(licfile)
++        md5value = bb.utils.md5_file(resolved_licfile)
+         license = md5sums.get(md5value, None)
+         if not license:
+-            crunched_md5, lictext = crunch_license(licfile)
++            crunched_md5, lictext = crunch_license(resolved_licfile)
+             license = crunched_md5sums.get(crunched_md5, None)
+             if lictext and not license:
+                 license = 'Unknown'
+@@ -1249,13 +1254,19 @@ def guess_license(srctree, d):
+         if license:
+             licenses.append((license, os.path.relpath(licfile, srctree), md5value))
+ 
++    return licenses
++
++def find_licenses(srctree, d):
++    licfiles = find_license_files(srctree)
++    licenses = match_licenses(licfiles, srctree, d)
++
+     # FIXME should we grab at least one source file with a license header and add that too?
+ 
+     return licenses
+ 
+ def split_pkg_licenses(licvalues, packages, outlines, fallback_licenses=None, pn='${PN}'):
+     """
+-    Given a list of (license, path, md5sum) as returned by guess_license(),
++    Given a list of (license, path, md5sum) as returned by match_licenses(),
+     a dict of package name to path mappings, write out a set of
+     package-specific LICENSE values.
+     """
+@@ -1418,4 +1429,3 @@ def register_commands(subparsers):
+     parser_create.add_argument('--devtool', action="store_true", help=argparse.SUPPRESS)
+     parser_create.add_argument('--mirrors', action="store_true", help='Enable PREMIRRORS and MIRRORS for source tree fetching (disabled by default).')
+     parser_create.set_defaults(func=create_recipe)
+-
+diff --git a/scripts/lib/recipetool/create_go.py b/scripts/lib/recipetool/create_go.py
+index a85a2f2786..5cc53931f0 100644
+--- a/scripts/lib/recipetool/create_go.py
++++ b/scripts/lib/recipetool/create_go.py
+@@ -14,7 +14,7 @@ from collections import namedtuple
+ from enum import Enum
+ from html.parser import HTMLParser
+ from recipetool.create import RecipeHandler, handle_license_vars
+-from recipetool.create import guess_license, tidy_licenses, fixup_license
++from recipetool.create import find_licenses, tidy_licenses, fixup_license
+ from recipetool.create import determine_from_url
+ from urllib.error import URLError, HTTPError
+ 
+@@ -624,7 +624,7 @@ class GoRecipeHandler(RecipeHandler):
+ 
+         licenses = []
+         lic_files_chksum = []
+-        licvalues = guess_license(tmp_vendor_dir, d)
++        licvalues = find_licenses(tmp_vendor_dir, d)
+         shutil.rmtree(tmp_vendor_dir)
+ 
+         if licvalues:
+diff --git a/scripts/lib/recipetool/create_npm.py b/scripts/lib/recipetool/create_npm.py
+index dd0ac01c3e..78dc248f31 100644
+--- a/scripts/lib/recipetool/create_npm.py
++++ b/scripts/lib/recipetool/create_npm.py
+@@ -17,7 +17,7 @@ from bb.fetch2.npm import npm_package
+ from bb.fetch2.npmsw import foreach_dependencies
+ from recipetool.create import RecipeHandler
+ from recipetool.create import get_license_md5sums
+-from recipetool.create import guess_license
++from recipetool.create import find_licenses
+ from recipetool.create import split_pkg_licenses
+ logger = logging.getLogger('recipetool')
+ 
+@@ -320,7 +320,7 @@ class NpmRecipeHandler(RecipeHandler):
+             return (licenses, chksums, fallback_licenses)
+ 
+         (licenses, extravalues["LIC_FILES_CHKSUM"], fallback_licenses) = _guess_odd_license(licfiles)
+-        split_pkg_licenses([*licenses, *guess_license(srctree, d)], packages, lines_after, fallback_licenses)
++        split_pkg_licenses([*licenses, *find_licenses(srctree, d)], packages, lines_after, fallback_licenses)
+ 
+         classes.append("npm")
+         handled.append("buildsystem")
+-- 
+cgit 1.2.3-korg
+
+From 0a0caacfa54dd086b87e31f5e806e5f21d5ffc3f Mon Sep 17 00:00:00 2001
+From: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Date: Mon, 12 Aug 2024 14:28:29 +0200
+Subject: recipetool: create_npm: reuse license utils
+
+create_npm.py duplicated the logic for matching licenses from files and
+also finding them. This patch refactors the code to reuse the license
+utils. This will make the code more maintainable and also align both
+behaviors. For instance, some licenses weren't matched properly because
+the duplicate logic did not support the difference in format in the md5
+tables for COMMON_LICENSE_DIR and licenses.csv.
+
+This is also faster since the license files were being read twice.
+The result is slightly more accurate since the utils have better
+implementations, and I was able to reuse the logic for the root PN
+package, as well as the base LICENSE variable.
+
+I chose to extract generate_common_licenses_chksums into create.py
+since it can be considered a general utility function to allow
+other recipetool creators to refer to COMMON_LICENSE_DIR files.
+
+I updated the wording in the code when appropriate.
+
+v3:
+ - added commit
+ - this replaces the commit that added all the COMMON_LICENSE_DIR md5
+   to licenses.csv
+
+(From OE-Core rev: 7bc18bed63b94689890bcde63402d7cc1cedffa9)
+
+Signed-off-by: Enguerrand de Ribaucourt <enguerrand.de-ribaucourt@savoirfairelinux.com>
+Signed-off-by: Alexandre Belloni <alexandre.belloni@bootlin.com>
+Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
+---
+ scripts/lib/recipetool/create.py     |  8 ++++
+ scripts/lib/recipetool/create_npm.py | 92 +++++++++++-------------------------
+ 2 files changed, 36 insertions(+), 64 deletions(-)
+
+diff --git a/scripts/lib/recipetool/create.py b/scripts/lib/recipetool/create.py
+index c626844370..ea2ef5be63 100644
+--- a/scripts/lib/recipetool/create.py
++++ b/scripts/lib/recipetool/create.py
+@@ -1295,6 +1295,14 @@ def split_pkg_licenses(licvalues, packages, outlines, fallback_licenses=None, pn
+         outlicenses[pkgname] = licenses
+     return outlicenses
+ 
++def generate_common_licenses_chksums(common_licenses, d):
++    lic_files_chksums = []
++    for license in tidy_licenses(common_licenses):
++        licfile = '${COMMON_LICENSE_DIR}/' + license
++        md5value = bb.utils.md5_file(d.expand(licfile))
++        lic_files_chksums.append('file://%s;md5=%s' % (licfile, md5value))
++    return lic_files_chksums
++
+ def read_pkgconfig_provides(d):
+     pkgdatadir = d.getVar('PKGDATA_DIR')
+     pkgmap = {}
+diff --git a/scripts/lib/recipetool/create_npm.py b/scripts/lib/recipetool/create_npm.py
+index 78dc248f31..3363a0e7ee 100644
+--- a/scripts/lib/recipetool/create_npm.py
++++ b/scripts/lib/recipetool/create_npm.py
+@@ -16,8 +16,7 @@ from bb.fetch2.npm import NpmEnvironment
+ from bb.fetch2.npm import npm_package
+ from bb.fetch2.npmsw import foreach_dependencies
+ from recipetool.create import RecipeHandler
+-from recipetool.create import get_license_md5sums
+-from recipetool.create import find_licenses
++from recipetool.create import match_licenses, find_license_files, generate_common_licenses_chksums
+ from recipetool.create import split_pkg_licenses
+ logger = logging.getLogger('recipetool')
+ 
+@@ -112,51 +111,53 @@ class NpmRecipeHandler(RecipeHandler):
+         """Return the extra license files and the list of packages"""
+         licfiles = []
+         packages = {}
+-        # Licenses from package.json point to COMMON_LICENSE_DIR so we need
+-        # to associate them explicitely for split_pkg_licenses()
++        # Licenses from package.json will point to COMMON_LICENSE_DIR so we need
++        # to associate them explicitely to packages for split_pkg_licenses()
+         fallback_licenses = dict()
+ 
+-        # Handle the parent package
+-        packages["${PN}"] = ""
+-
+-        def _licfiles_append_fallback_package_files(destdir):
+-            """Append package.json files as fallback to license files if a license files is missing"""
++        def _find_package_licenses(destdir):
++            """Either find license files, or use package.json metadata"""
+             def _get_licenses_from_package_json(package_json):
+                 with open(os.path.join(srctree, package_json), "r") as f:
+                     data = json.load(f)
+                     if "license" in data:
+                         licenses = data["license"].split(" ")
+                         licenses = [license.strip("()") for license in licenses if license != "OR" and license != "AND"]
+-                        return ["${COMMON_LICENSE_DIR}/" + license for license in licenses], licenses
++                        return [], licenses
+                     else:
+                         return [package_json], None
+ 
+-            fallback = True
+             basedir = os.path.join(srctree, destdir)
+-            for fn in os.listdir(basedir):
+-                upper = fn.upper()
+-                if upper.startswith("COPYING") or "LICENCE" in upper or "LICENSE" in upper:
+-                    fallback = False
+-            if fallback:
++            licfiles = find_license_files(basedir)
++            if len(licfiles) > 0:
++                return licfiles, None
++            else:
++                # A license wasn't found in the package directory, so we'll use the package.json metadata
+                 pkg_json = os.path.join(basedir, "package.json")
+                 return _get_licenses_from_package_json(pkg_json)
+-            return [], None
++
++        def _get_package_licenses(destdir, package):
++            (package_licfiles, package_licenses) = _find_package_licenses(destdir)
++            if package_licfiles:
++                licfiles.extend(package_licfiles)
++            else:
++                fallback_licenses[package] = package_licenses
+ 
+         # Handle the dependencies
+         def _handle_dependency(name, params, destdir):
+             deptree = destdir.split('node_modules/')
+             suffix = "-".join([npm_package(dep) for dep in deptree])
+             packages["${PN}" + suffix] = destdir
+-            (fallback_licfiles, common_lics) = _licfiles_append_fallback_package_files(destdir)
+-            licfiles.extend(fallback_licfiles)
+-            if common_lics:
+-                fallback_licenses["${PN}" + suffix] = common_lics
++            _get_package_licenses(destdir, "${PN}" + suffix)
+ 
+         with open(shrinkwrap_file, "r") as f:
+             shrinkwrap = json.load(f)
+-
+         foreach_dependencies(shrinkwrap, _handle_dependency, dev)
+ 
++        # Handle the parent package
++        packages["${PN}"] = ""
++        _get_package_licenses(srctree, "${PN}")
++
+         return licfiles, packages, fallback_licenses
+     
+     # Handle the peer dependencies   
+@@ -279,48 +280,11 @@ class NpmRecipeHandler(RecipeHandler):
+ 
+         bb.note("Handling licences ...")
+         (licfiles, packages, fallback_licenses) = self._handle_licenses(srctree, shrinkwrap_file, dev)
+-
+-        def _guess_odd_license(licfiles):
+-            import bb
+-
+-            md5sums = get_license_md5sums(d, linenumbers=True)
+-
+-            def _resolve_licfile(srctree, licfile):
+-                match = re.search(r'\$\{COMMON_LICENSE_DIR\}/(.+)$', licfile)
+-                if match:
+-                    license = match.group(1)
+-                    commonlicdir = d.getVar('COMMON_LICENSE_DIR')
+-                    return os.path.join(commonlicdir, license)
+-                
+-                return os.path.join(srctree, licfile)
+-
+-            chksums = []
+-            licenses = []
+-            md5value = None
+-            for licfile in licfiles:
+-                f = _resolve_licfile(srctree, licfile)
+-                try:
+-                    md5value = bb.utils.md5_file(f)
+-                except FileNotFoundError:
+-                    logger.info("Could not determine license for '%s'" % licfile)
+-                (license, beginline, endline, md5) = md5sums.get(md5value,
+-                    (None, "", "", ""))
+-                if not license:
+-                    license = "Unknown"
+-                    logger.info("Please add the following line for '%s' to a "
+-                        "'lib/recipetool/licenses.csv' and replace `Unknown`, "
+-                        "`X`, `Y` and `MD5` with the license, begin line, "
+-                        "end line and partial MD5 checksum:\n" \
+-                        "%s,Unknown,X,Y,MD5" % (licfile, md5value))
+-                chksums.append("file://%s%s%s;md5=%s" % (licfile,
+-                    ";beginline=%s" % (beginline) if beginline else "",
+-                    ";endline=%s" % (endline) if endline else "",
+-                    md5 if md5 else md5value))
+-                licenses.append((license, licfile, md5value))
+-            return (licenses, chksums, fallback_licenses)
+-
+-        (licenses, extravalues["LIC_FILES_CHKSUM"], fallback_licenses) = _guess_odd_license(licfiles)
+-        split_pkg_licenses([*licenses, *find_licenses(srctree, d)], packages, lines_after, fallback_licenses)
++        licvalues = match_licenses(licfiles, srctree, d)
++        split_pkg_licenses(licvalues, packages, lines_after, fallback_licenses)
++        fallback_licenses_flat = [license for sublist in fallback_licenses.values() for license in sublist]
++        extravalues["LIC_FILES_CHKSUM"] = generate_common_licenses_chksums(fallback_licenses_flat, d)
++        extravalues["LICENSE"] = fallback_licenses_flat
+ 
+         classes.append("npm")
+         handled.append("buildsystem")
+-- 
+cgit 1.2.3-korg
+
+From ee6bf285d7ca35ab0f76c151a36e888ad1e41c40 Mon Sep 17 00:00:00 2001
+From: Leonard Göhrs <l.goehrs@pengutronix.de>
+Date: Fri, 23 Aug 2024 07:46:34 +0200
+Subject: bitbake: fetch2/npm: allow the '@' character in package names
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The '@types/ramda' [1] npm package has recently gained a dependency on
+the 'types-ramda' [2] npm package. Both have the same version number.
+
+The name mangling results in the tarballs of both packages sharing the same
+name, but different contents.
+
+Fix that by accepting '@' as valid character in the package name,
+resulting in one package named @types-ramda and one called types-ramda.
+
+[1]: https://www.npmjs.com/package/@types/ramda
+[2]: https://www.npmjs.com/package/types-ramda
+
+(Bitbake rev: 7c9573cb6ea2081bc585eb65267f3124fd4d7e43)
+
+Signed-off-by: Leonard Göhrs <l.goehrs@pengutronix.de>
+Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
+---
+ bitbake/lib/bb/fetch2/npm.py | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/bitbake/lib/bb/fetch2/npm.py b/bitbake/lib/bb/fetch2/npm.py
+index 15f3f19bc8..ac76d64cdb 100644
+--- a/bitbake/lib/bb/fetch2/npm.py
++++ b/bitbake/lib/bb/fetch2/npm.py
+@@ -42,11 +42,12 @@ from bb.utils import is_semver
+ 
+ def npm_package(package):
+     """Convert the npm package name to remove unsupported character"""
+-    # Scoped package names (with the @) use the same naming convention
+-    # as the 'npm pack' command.
++    # For scoped package names ('@user/package') the '/' is replaced by a '-'.
++    # This is similar to what 'npm pack' does, but 'npm pack' also strips the
++    # leading '@', which can lead to ambiguous package names.
+     name = re.sub("/", "-", package)
+     name = name.lower()
+-    name = re.sub(r"[^\-a-z0-9]", "", name)
++    name = re.sub(r"[^\-a-z0-9@]", "", name)
+     name = name.strip("-")
+     return name
+ 
+-- 
+cgit 1.2.3-korg
+
