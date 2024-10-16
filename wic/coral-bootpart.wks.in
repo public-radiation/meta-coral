@@ -15,6 +15,7 @@
 #
 part u-boot --source rawcopy --sourceparams="file=imx-boot" --ondisk mmcblk --no-table --align ${IMX_BOOT_SEEK}
 part /boot --source bootimg-partition --ondisk mmcblk --fstype=ext4 --label boot --active --align 8192 --size 64
-part / --source rootfs --ondisk mmcblk --fstype=ext4 --label root --align 8192 --uuid=70672ec3-5eee-49ff-b3b1-eb1fbd406bf5
+part / --size 4G --source rootfs --ondisk mmcblk --fstype=ext4 --label root_A --align 8192 --uuid=70672ec3-5eee-49ff-b3b1-eb1fbd406bf5
+part --size 4G --source rootfs --ondisk mmcblk --fstype=ext4 --label root_B --align 8192 --uuid=372d664e-f063-470a-a34a-1261afa5019f
 
 bootloader --ptable gpt

@@ -1,0 +1,10 @@
+#!/bin/sh
+
+_cur_mmcpart=$(fw_printenv rootpart | cut -d "=" -f 2)
+if [ "$_cur_mmcpart" -eq 2 ]; then
+    _partno=B
+else
+    _partno=A
+fi
+SWUPDATE_EXTRA_ARGS="-e stable,rootfs${_partno} -H coral-dev:any -f /etc/swupdate.cfg"
+SWUPDATE_ARGS="-v ${SWUPDATE_EXTRA_ARGS}"
