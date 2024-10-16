@@ -1,0 +1,13 @@
+diff --git a/meta/classes-recipe/npm.bbclass b/meta/classes-recipe/npm.bbclass
+index 91da3295f2..a1d89f5c58 100644
+--- a/meta/classes-recipe/npm.bbclass
++++ b/meta/classes-recipe/npm.bbclass
+@@ -24,7 +24,7 @@ RDEPENDS:${PN}:append:class-target = " nodejs"
+ 
+ EXTRA_OENPM = ""
+ 
+-NPM_INSTALL_DEV ?= "0"
++NPM_INSTALL_DEV ?= "1"
+ 
+ NPM_NODEDIR ?= "${RECIPE_SYSROOT_NATIVE}${prefix_native}"
+ 
