@@ -1,0 +1,31 @@
+diff --git a/Makefile b/Makefile
+index 667350e3..48252431 100644
+--- a/Makefile
++++ b/Makefile
+@@ -188,7 +188,7 @@ ASFLAGS_aarch32		=	$(march32-directive)
+ ASFLAGS_aarch64		=	-march=armv8-a
+ 
+ CPPFLAGS		=	${DEFINES} ${INCLUDES} ${MBEDTLS_INC} -nostdinc		\
+-				-Wmissing-include-dirs -Werror
++				-Wmissing-include-dirs -Werror -Wno-error=array-bounds
+ ASFLAGS			+=	$(CPPFLAGS) $(ASFLAGS_$(ARCH))			\
+ 				-D__ASSEMBLY__ -ffreestanding 			\
+ 				-Wa,--fatal-warnings
+@@ -199,6 +199,8 @@ TF_CFLAGS		+=	$(CPPFLAGS) $(TF_CFLAGS_$(ARCH))		\
+ GCC_V_OUTPUT		:=	$(shell $(CC) -v 2>&1)
+ PIE_FOUND		:=	$(findstring --enable-default-pie,${GCC_V_OUTPUT})
+ 
++TF_LDFLAGS		+=	-z noexecstack
++
+ ifneq ($(PIE_FOUND),)
+ TF_CFLAGS		+=	-fno-PIE
+ endif
+@@ -208,7 +210,7 @@ ifeq (${ENABLE_BACKTRACE},1)
+ TF_CFLAGS		+=	-fno-omit-frame-pointer
+ endif
+ 
+-TF_LDFLAGS		+=	--fatal-warnings -O1
++TF_LDFLAGS		+=	$(call ld_option, --no-warn-rwx-segments)	
+ TF_LDFLAGS		+=	--gc-sections
+ TF_LDFLAGS		+=	$(TF_LDFLAGS_$(ARCH))
+ 
