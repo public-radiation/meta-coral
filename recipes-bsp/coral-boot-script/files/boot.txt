@@ -4,6 +4,9 @@ script=boot.scr
 mmc_root="PARTUUID=70672ec3-5eee-49ff-b3b1-eb1fbd406bf5"
 mmc_root="PARTUUID=372d664e-f063-470a-a34a-1261afa5019f"
 sd_root="/dev/mmcblk1p2"
+bootdev=1
+bootpart=2
+bootdir="/boot"
 
 # Check boot device to decide which root partition to use
 if test ${bootdev} = 1; then
@@ -23,11 +26,11 @@ fi
 
 cmdline="root=${root} rootfstype=ext4 rw rootwait net.ifnames=0 pci=pcie_bus_perf"
 
-load mmc ${bootdev}:1 ${loadaddr} ${image}
+load mmc ${bootdev}:${bootpart} ${loadaddr} ${bootdir}/${image}
 setenv bootargs ${cmdline} ${extra_bootargs}
 
 #Load base device tree.
-load mmc ${bootdev}:1 ${fdt_addr} ${fdt_file}
+load mmc ${bootdev}:${bootpart} ${fdt_addr} ${bootdir}/${fdt_file}
 fdt addr ${fdt_addr}
 fdt resize
 
@@ -35,14 +38,14 @@ fdt resize
 setexpr fdtovaddr ${fdt_addr} + F000
 
 # Parse overlays.txt and apply individual overlays.
-if load mmc ${bootdev}:1 ${fdtovaddr} overlays.txt && env import -t ${fdtovaddr} ${filesize} && test -n ${overlay}; then
+if load mmc ${bootdev}:${bootpart} ${fdtovaddr} ${bootdir}/overlays.txt && env import -t ${fdtovaddr} ${filesize} && test -n ${overlay}; then
 	echo loaded overlay.txt: ${overlay}
 	for ov in ${overlay}; do
-		if load mmc ${bootdev}:1 ${fdtovaddr} ${ov}.dtbo && fdt apply ${fdtovaddr}; then
+		if load mmc ${bootdev}:${bootpart} ${fdtovaddr} ${bootdir}/${ov}.dtbo && fdt apply ${fdtovaddr}; then
 			echo overlay of ${ov} successful
 		else
 			echo overlay failed, reverting to original device tree
-			load mmc ${bootdev}:1 ${fdt_addr} ${fdt_file}
+			load mmc ${bootdev}:${bootpart} ${fdt_addr} ${bootdir}/${fdt_file}
 			booti ${loadaddr} - ${fdt_addr}
 		fi
 	done
