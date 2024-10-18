@@ -1,10 +1,13 @@
 # Copyright (C) 2020 Mirza Krak
 require recipes-kernel/linux/linux-imx.inc
 SUMMARY = "Linux Kernel provided and supported by Google for Coral Dev Board"
+LIC_FILES_CHKSUM = "file://COPYING;md5=d7810fab7487fb0aad327b76f1be7cd7" 
 
 DEPENDS += "lzop-native bc-native"
 
 LINUX_VERSION = "4.14.98"
+
+KBUILD_DEFCONFIG = "defconfig"
 
 SRCREV = "c13f50afd3920f718f9becc9f47c31fccba00bf7"
 SRC_URI = "\
@@ -13,7 +16,6 @@ SRC_URI = "\
     file://0002-include-linux-module.h-copy-__init-__exit-attrs-to-i.patch \
     file://0003-Compiler-Attributes-add-support-for-__copy-gcc-9.patch \
     file://0004-Add-an-alias-for-imx8mq-phanbell.dts.patch \
-    file://defconfig \
     file://mendel.cfg \
     file://extra.cfg \
 "
