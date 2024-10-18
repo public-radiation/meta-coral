@@ -20,4 +20,4 @@ do_install:append() {
 
 # We don't want to run this service
 SYSTEMD_AUTO_ENABLE_${PN}-progress = "disable"
-SYSTEMD_SERVICE:${PN} += " swupdate-sysrestart.service"
+SYSTEMD_SERVICE:${PN} += " swupdate-sysrestart.service "
