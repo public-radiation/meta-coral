@@ -24,7 +24,7 @@ else
     setenv fdt_file imx8mq-phanbell.dtb
 fi
 
-cmdline="root=${root} rootfstype=ext4 rw rootwait net.ifnames=0 pci=pcie_bus_perf"
+cmdline="clk_ignore_unused console=ttymxc0,115200 earlycon=ec_imx6q,0x30860000,115200 root=${root} rootfstype=ext4 rw rootwait net.ifnames=0 pci=pcie_bus_perf mem=950MB"
 
 load mmc ${bootdev}:${bootpart} ${loadaddr} ${bootdir}/${image}
 setenv bootargs ${cmdline} ${extra_bootargs}
