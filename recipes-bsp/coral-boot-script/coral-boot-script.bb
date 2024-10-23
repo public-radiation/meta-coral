@@ -6,17 +6,22 @@ DEPENDS = "u-boot-mkimage-native"
 
 INHIBIT_DEFAULT_DEPS = "1"
 
-SRC_URI = "file://boot.txt"
+SRC_URI = " \
+    file://boot_a.txt \
+    file://boot_b.txt \
+"
 
 do_compile() {
-    mkimage -A arm -T script -C none -n "Boot script" -d "${WORKDIR}/boot.txt" boot.scr
+    mkimage -A arm -T script -C none -n "Boot script" -d "${WORKDIR}/boot_a.txt" boot_a.scr
+    mkimage -A arm -T script -C none -n "Boot script" -d "${WORKDIR}/boot_b.txt" boot_b.scr
 }
 
 inherit deploy nopackages
 
 do_deploy() {
     install -d ${DEPLOYDIR}
-    install -m 0644 boot.scr ${DEPLOYDIR}
+    install -m 0644 boot_a.scr ${DEPLOYDIR}
+    install -m 0644 boot_b.scr ${DEPLOYDIR}
 }
 
 addtask do_deploy after do_compile before do_build
