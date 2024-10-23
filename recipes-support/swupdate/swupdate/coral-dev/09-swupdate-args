@@ -1,10 +1,12 @@
 #!/bin/sh
 
-_cur_mmcpart=$(fw_printenv rootpart | cut -d "=" -f 2)
-if [ "$_cur_mmcpart" -eq 2 ]; then
-    _partno=B
-else
+_cur_mmcpart=$(basename $(findmnt / -o SOURCE -n ))
+if [ "$_cur_mmcpart" == "mmcblk1p3" ]; then
+    # Current bank is B, install to A
     _partno=A
+else
+    # Current bank is A, install to B
+    _partno=B
 fi
-SWUPDATE_EXTRA_ARGS="-e stable,rootfs${_partno} -H coral-dev:any -f /etc/swupdate.cfg"
+SWUPDATE_EXTRA_ARGS="-e stable,rootfs${_partno} -H coral-dev:1.0 -f /etc/swupdate.cfg"
 SWUPDATE_ARGS="-v ${SWUPDATE_EXTRA_ARGS}"

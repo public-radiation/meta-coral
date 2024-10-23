@@ -1,0 +1,9 @@
+[Unit]
+Description=resize2fs daemon
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sh -c 'resize2fs $(findmnt / -o SOURCE -n)'
+
+[Install]
+WantedBy=multi-user.target

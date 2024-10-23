@@ -1,0 +1,8 @@
+[Unit]
+Description=Boot boot
+After=systemd-modules-load.service
+
+[Mount]
+What=/dev/mmcblk1p1
+Where=/boot/boot
+Type=ext4
