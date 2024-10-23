@@ -1,0 +1,87 @@
+diff --git a/meta-arm-toolchain/conf/distro/include/external-arm-toolchain-versions.inc b/meta-arm-toolchain/conf/distro/include/external-arm-toolchain-versions.inc
+index 675457d1..b2e65959 100644
+--- a/meta-arm-toolchain/conf/distro/include/external-arm-toolchain-versions.inc
++++ b/meta-arm-toolchain/conf/distro/include/external-arm-toolchain-versions.inc
+@@ -15,12 +15,12 @@ def eat_run(d, cmd, *args):
+ 
+ def eat_get_version(d):
+     try:
+-        stdout, stderr = eat_run(d, 'gcc', '-v')
++        stdout, stderr = eat_run(d, 'gcc', '--version')
+     except bb.process.CmdError as exc:
+         bb.error('Failed to obtain external Arm toolchain version: %s' % exc)
+         return 'UNKNOWN'
+     else:
+-        last_line = stderr.splitlines()[-1]
++        last_line = stdout.splitlines()[0]
+         return last_line
+ 
+ # Extract the YYYY.MM or release version
+@@ -28,16 +28,9 @@ def eat_get_main_version(d):
+     version = eat_get_version(d)
+     bb.debug(2, 'Trying for parse version info from: %s' % version)
+     if version != 'UNKNOWN':
+-        if version.split()[4] == '(Arm':
+-            # gcc version 11.3.1 20220712 (Arm GNU Toolchain 11.3.Rel1)
+-            return version.split()[7].split(')')[0]
+-        elif version.split()[4] == '(GNU':
+-            # gcc version 9.2.1 20191025 (GNU Toolchain for the A-profile Architecture 9.2-2019.12 (arm-9.10))
+-            # gcc version 8.2.1 20180802 (GNU Toolchain for the A-profile Architecture 8.2-2018.11 (arm-rel-8.26))
+-            return version.split()[10].split('-')[1]
+-        elif version.split()[3] == '(GNU':
+-            # gcc version 8.3.0 (GNU Toolchain for the A-profile Architecture 8.3-2019.03 (arm-rel-8.36))
+-            return version.split()[9].split('-')[1]
++        if version.split()[1] == '(Buildroot':
++            # aarch64-buildroot-linux-gnu-gcc.br_real (Buildroot 2021.11-11272-ge2962af) 12.3.0
++            return version.split()[2].split('-')[0]
+         else:
+             bb.error('Failed to parse external Arm toolchain version from: %s' % version)
+     else:
+@@ -47,7 +40,8 @@ def eat_get_main_version(d):
+ def eat_get_gcc_version(d):
+     version = eat_get_version(d)
+     if version != 'UNKNOWN':
+-        return version.split()[2]
++        ## aarch64-buildroot-linux-gnu-gcc.br_real (Buildroot 2021.11-11272-ge2962af) 12.3.0
++        return version.split()[3]
+     else:
+         return version
+ 
+@@ -60,7 +54,7 @@ def eat_get_libc_version(d):
+         return 'UNKNOWN'
+ 
+     topdir = d.getVar('TOPDIR', True)
+-    lddpath = syspath + '/libc/usr/bin/ldd'
++    lddpath = syspath + '/sysroot/usr/bin/ldd'
+ 
+     if os.path.exists(lddpath):
+         cmd = '/bin/sh ' + lddpath + ' --version'
+@@ -81,7 +75,7 @@ def eat_get_kernel_version(d):
+     if not syspath:
+         return 'UNKNOWN'
+ 
+-    vf = syspath + '/libc/usr/include/linux/version.h'
++    vf = syspath + '/sysroot/usr/include/linux/version.h'
+ 
+     try:
+         f = open(vf, 'r')
+@@ -130,5 +124,6 @@ python external_arm_toolchain_version_handler () {
+     d.setVar('EAT_VER_KERNEL', eat_get_kernel_version(ld))
+     d.setVar('EAT_VER_GDB', eat_get_gdb_version(ld))
+     d.setVar('EAT_VER_BFD', eat_get_bfd_version(ld))
++    bb.error(eat_get_main_version(ld), " gcc ", eat_get_gcc_version(ld), " c: ", eat_get_libc_version(ld), " k: ",  eat_get_kernel_version(ld), " gdb: ", eat_get_gdb_version(ld), " bfd: ", eat_get_bfd_version(ld) )
+ }
+ addhandler external_arm_toolchain_version_handler
+diff --git a/meta-arm-toolchain/conf/distro/include/tcmode-external-arm.inc b/meta-arm-toolchain/conf/distro/include/tcmode-external-arm.inc
+index 898663ea..f798b2a6 100644
+--- a/meta-arm-toolchain/conf/distro/include/tcmode-external-arm.inc
++++ b/meta-arm-toolchain/conf/distro/include/tcmode-external-arm.inc
+@@ -11,7 +11,7 @@ TOOLCHAIN_PATH_ADD = "${EXTERNAL_TOOLCHAIN}/bin:"
+ PATH =. "${TOOLCHAIN_PATH_ADD}"
+ 
+ EAT_TARGET_SYS:arm ?= "${@ 'arm-none-linux-gnueabihf' if os.path.exists('${EXTERNAL_TOOLCHAIN}/bin/arm-none-linux-gnueabihf-gcc') else 'arm-linux-gnueabihf'}"
+-EAT_TARGET_SYS:aarch64 ?= "${@ 'aarch64-none-linux-gnu' if os.path.exists('${EXTERNAL_TOOLCHAIN}/bin/aarch64-none-linux-gnu-gcc') else 'aarch64-linux-gnu'}"
++EAT_TARGET_SYS:aarch64 ?= 'aarch64-buildroot-linux-gnu'
+ EAT_TARGET_SYS = "${TARGET_SYS}"
+ TARGET_PREFIX = "${EAT_TARGET_SYS}-"
+ 
