@@ -5,6 +5,7 @@ PACKAGECONFIG_CONFARGS = ""
 SRC_URI += " \
      file://swupdate.cfg \
      file://09-swupdate-args \
+     file://install_swu.sh \
      file://swupdate-sysrestart.service \
      file://defconfig \   
      file://boot-boot.mount \
@@ -26,11 +27,16 @@ do_install:append() {
     ln -sf ../boot-boot.mount                    ${D}${systemd_system_unitdir}/sysinit.target.wants/boot-boot.mount
 
     install -m 0644 ${WORKDIR}/resize-filesystem.service    ${D}${systemd_system_unitdir}/
+
+    mkdir -p ${D}/${bindir}
+    install -m 755 ${WORKDIR}/install_swu.sh ${D}/${bindir}/.
 }
 
 # We don't want to run this service
 SYSTEMD_AUTO_ENABLE_${PN}-progress = "disable"
 SYSTEMD_SERVICE:${PN} += " swupdate-sysrestart.service "
+
+FILES:${PN} += "/usr/bin/install_swu.sh"
 
 FILES:${PN} += "/boot/boot ${systemd_system_unitdir}/boot-boot.mount ${systemd_system_unitdir}/sysinit.target.wants/boot-boot.mount"
 SYSTEMD_SERVICE:${PN} += " boot-boot.mount "
